@@ -1,10 +1,10 @@
-; * = width                                    |   BC      |  D  |     HL      |  IXL   | IXH  | Preserves   
-;----------------------------------------------+-----------+-----+-------------+--------+------+------------
-; draw_tile[_with_mask]_*                      |  cy,cx    |     | sprite_addr | height |      | IXH,IY,ALL'
-; draw_tile[_with_mask]_*_at_addr              | dst_addr  |     | sprite_addr | height | B&~7 | IXH,IY,ALL'
-; draw_preshifted_sprite[_with_mask]_*         |  cy,cx    | dy  | sprite_addr | height |      |   IY,ALL'
-; draw_preshifted_sprite[_with_mask]_*_at_addr | dst_addr  | dy  | sprite_addr | height | B&~7 |   IY,ALL'
-;----------------------------------------------+-----------+-----+-------------+--------+------+------------
+; * = width                                    |   BC      |  D  |     HL      | IXL|IYL | IXH|IYH  | Preserves   
+;----------------------------------------------+-----------+-----+-------------+---------+----------+--------------------------
+; draw_tile[_with_mask]_*                      |  cy,cx    |     | sprite_addr | height  |          | (IXH, IY)|(IX, IYH), ALL'
+; draw_tile[_with_mask]_*_at_addr              | dst_addr  |     | sprite_addr | height  |   B&~7   | (IXH, IY)|(IX, IYH), ALL'
+; draw_preshifted_sprite[_with_mask]_*         |  cy,cx    | dy  | sprite_addr | height  |          | IY|IX, ALL'
+; draw_preshifted_sprite[_with_mask]_*_at_addr | dst_addr  | dy  | sprite_addr | height  |   B&~7   | IY|IX, ALL'
+;----------------------------------------------+-----------+-----+-------------+---------+----------+--------------------------
 ; where (cx,cy) - character coords and dy - offset inside character (0-7).
 
 ; * = width                                  | code size             | data size | time (+[dT + [dT]] - time to cross screen 1/3 and 2/3)
@@ -20,6 +20,19 @@
 ; draw_preshifted_sprite_with_mask_*_at_addr | 50 + 48*width +       |    16     | 205 + 51*height + 288*width*height + [43 + [43]]
 ;                                            | + {18 once for all}   |           |
 ; draw_preshifted_sprite_with_mask_*         | +17                   |           | +66
+
+
+                    IFNDEF PRESERVE_IX
+                        DEFINE IZ! IX
+                        DEFINE IZL! IXL
+                        DEFINE IZH! IXH
+                        DEFINE IZ_PREFIX! #DD ; IX opcodes prefix
+                    ELSE
+                        DEFINE IZ! IY
+                        DEFINE IZL! IYL
+                        DEFINE IZH! IYH
+                        DEFINE IZ_PREFIX! #FD ; IY opcodes prefix
+                    ENDIF
 
 
 ; Size = 5
@@ -84,7 +97,7 @@
                         LD H,B
                         LD L,C
 
-                        LD C,IXL
+                        LD C,IZL!
 
                         CP 0
                         ORG $-1
@@ -137,7 +150,7 @@
 
                         LD H,B
 
-                        LD A,IXL
+                        LD A,IZL!
                         LD L,A
 
                         CP 0
@@ -210,7 +223,7 @@ _draw_sprite_BC_next_char
                     IFUSED
                         ; B -= 7
                         ; C += 32
-                        LD B,IXH
+                        LD B,IZH!
                         LD A,C
                         ADD 32
                         LD C,A
@@ -220,7 +233,7 @@ _draw_sprite_BC_next_char
                         LD A,B
                         ADD 8
                         LD B,A
-                        LD IXH,B
+                        LD IZH!,B
                         JP .exit
                     ENDIF
 
@@ -247,18 +260,18 @@ _draw_sprite_BC_next_char
                         LD L,A
 
                         LD (.restore_addr),HL
-                        LD (HL),#DD ; IX prefix
+                        LD (HL),IZ_PREFIX!
                         INC HL
-                        LD (HL),#E9 ; JP (IX)
+                        LD (HL),#E9 ; JP (IX|IY)
                         INC HL
                         LD (_draw_sprite_HL_next_char.ret_addr),HL
 
                         LD H,B
                         LD L,C
-                        LD B,IXL
-                        LD C,IXH
+                        LD B,IZL!
+                        LD C,IZH!
 
-                        LD IX,_draw_sprite_HL_next_char
+                        LD IZ!,_draw_sprite_HL_next_char
 
                         CP 0
                         ORG $-1
@@ -345,7 +358,7 @@ _PROC_NAME!_patch_7     INC B
                         _draw_line_with_mask_into_BC WIDTH, -1
                         INC B
 
-                        DEC IXL
+                        DEC IZL!
                         JP NZ,.loop
 .break
                         LD A,#04 ; INC B
@@ -391,3 +404,9 @@ _i                  = 1
                         _define_draw_proc preshifted_sprite_with_mask, NUMBERS[_i]
 _i                      = _i + 1
                     EDUP
+
+
+                    UNDEFINE IZ!
+                    UNDEFINE IZL!
+                    UNDEFINE IZH!
+                    UNDEFINE IZ_PREFIX!
